@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 demo_gif.py
-Interactive CLI utility to convert video recordings into high-quality demo GIFs.
+Interactive and CLI utility to convert video recordings into high-quality demo GIFs.
 Optimized for GitHub and web documentation using FFmpeg and Gifski.
 
 Author: Antigravity AV Assistant
@@ -13,6 +13,7 @@ import glob
 import json
 import shlex
 import shutil
+import argparse
 import tempfile
 import subprocess
 
@@ -266,15 +267,115 @@ def prompt_settings(video_info):
     }
 
 
-def main():
+def optimize_with_gifsicle(gif_path):
+    """Post-process optimization using gifsicle if available on the system."""
+    if not shutil.which("gifsicle"):
+        return False, "gifsicle is not installed."
+        
+    print(f"{CYAN}Running gifsicle post-optimization...{RESET}")
+    temp_gif = gif_path + ".tmp"
+    cmd = ["gifsicle", "-O3", "--lossy=80", "-o", temp_gif, gif_path]
+    
     try:
-        print_header()
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if not os.path.exists(temp_gif):
+            return False, "gifsicle finished but temporary file was not created."
+            
+        orig_size = os.path.getsize(gif_path)
+        opt_size = os.path.getsize(temp_gif)
+        
+        if opt_size < orig_size:
+            shutil.move(temp_gif, gif_path)
+            saved = orig_size - opt_size
+            percent = (saved / orig_size) * 100
+            print(f"{GREEN}✓ Gifsicle compression saved {format_size(saved)} ({percent:.1f}% reduction){RESET}")
+            return True, opt_size
+        else:
+            os.remove(temp_gif)
+            print(f"{YELLOW}Note: gifsicle ran but did not reduce size further.{RESET}")
+            return True, orig_size
+    except Exception as e:
+        if os.path.exists(temp_gif):
+            os.remove(temp_gif)
+        print(f"{RED}Warning: gifsicle optimization failed: {e}{RESET}")
+        return False, str(e)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Convert video screen recordings into high-quality demo GIFs."
+    )
+    parser.add_argument("-i", "--input", help="Path to input video file (triggers non-interactive mode)")
+    parser.add_argument("-o", "--output", help="Path to output GIF file (defaults to input base name + .gif)")
+    parser.add_argument("-f", "--fps", type=int, default=15, help="Target frame rate (default: 15)")
+    parser.add_argument("-w", "--width", help="Max width in pixels (e.g., 800) or 'original' (default: 800)")
+    parser.add_argument("-q", "--quality", type=int, default=90, help="Gifski quality 1-100 (default: 90)")
+    parser.add_argument("--no-optimize", action="store_true", help="Bypass optional gifsicle post-optimization")
+    
+    args = parser.parse_args()
+    
+    try:
         check_dependencies()
         
-        input_path, video_info = prompt_input_file()
-        output_path = prompt_output_file(input_path)
-        settings = prompt_settings(video_info)
+        # Check if we should run in interactive mode (no input argument provided)
+        interactive = (args.input is None)
         
+        if interactive:
+            print_header()
+            input_path, video_info = prompt_input_file()
+            output_path = prompt_output_file(input_path)
+            settings = prompt_settings(video_info)
+            optimize_gifsicle = not args.no_optimize
+        else:
+            input_path = os.path.abspath(os.path.expanduser(args.input))
+            success, video_info = verify_and_probe_video(input_path)
+            if not success:
+                print(f"{RED}❌ Error: {video_info}{RESET}")
+                sys.exit(1)
+                
+            # Parse output
+            if args.output:
+                output_path = os.path.abspath(os.path.expanduser(args.output))
+                if not output_path.lower().endswith('.gif'):
+                    output_path += '.gif'
+            else:
+                dir_name, file_name = os.path.split(input_path)
+                base_name, _ = os.path.splitext(file_name)
+                output_path = os.path.join(dir_name, f"{base_name}.gif")
+                
+            # Parse settings
+            fps = args.fps
+            if not (1 <= fps <= 60):
+                print(f"{RED}❌ Error: FPS must be between 1 and 60.{RESET}")
+                sys.exit(1)
+                
+            quality = args.quality
+            if not (1 <= quality <= 100):
+                print(f"{RED}❌ Error: Quality must be between 1 and 100.{RESET}")
+                sys.exit(1)
+                
+            orig_width = video_info.get("width", 800)
+            if args.width:
+                if args.width.lower() == 'original':
+                    width = orig_width
+                else:
+                    try:
+                        width = int(args.width)
+                        if width <= 0:
+                            raise ValueError
+                    except ValueError:
+                        print(f"{RED}❌ Error: Width must be a positive integer or 'original'.{RESET}")
+                        sys.exit(1)
+            else:
+                width = min(800, orig_width)
+                
+            settings = {
+                "fps": fps,
+                "width": width,
+                "quality": quality
+            }
+            optimize_gifsicle = not args.no_optimize
+            
         # Build scaling filter
         # trunc(...) ensures width and height scale to even numbers, which is essential for yuv420p
         scale_filter = f"scale='trunc(min({settings['width']},iw)/2)*2:-2'"
@@ -299,28 +400,28 @@ def main():
             "-"
         ]
         
-        # Print execution plan (using shlex.join for shell copy-paste safety)
-        print(f"\n{BOLD}{CYAN}=================================================={RESET}")
-        print(f"{BOLD}🛠  CONVERSION PLAN{RESET}")
-        print(f"{BOLD}{CYAN}=================================================={RESET}")
-        print(f"  {BOLD}Input:{RESET}   {input_path}")
-        print(f"  {BOLD}Output:{RESET}  {output_path}")
-        print(f"  {BOLD}FPS:{RESET}     {settings['fps']}")
-        print(f"  {BOLD}Width:{RESET}   {settings['width']}px (max)")
-        print(f"  {BOLD}Quality:{RESET} {settings['quality']}")
-        print(f"  {BOLD}Pipeline command:{RESET}")
-        print(f"    {shlex.join(ffmpeg_cmd)} | {shlex.join(gifski_cmd)}")
-        print(f"{CYAN}=================================================={RESET}\n")
-        
-        confirm = input(f"{BOLD}Start conversion? [Y/n]:{RESET} ").strip().lower()
-        if confirm == 'n':
-            print("Conversion cancelled.")
-            sys.exit(0)
+        # In interactive mode, preview conversion plan and request confirmation
+        if interactive:
+            print(f"\n{BOLD}{CYAN}=================================================={RESET}")
+            print(f"{BOLD}🛠  CONVERSION PLAN{RESET}")
+            print(f"{BOLD}{CYAN}=================================================={RESET}")
+            print(f"  {BOLD}Input:{RESET}   {input_path}")
+            print(f"  {BOLD}Output:{RESET}  {output_path}")
+            print(f"  {BOLD}FPS:{RESET}     {settings['fps']}")
+            print(f"  {BOLD}Width:{RESET}   {settings['width']}px (max)")
+            print(f"  {BOLD}Quality:{RESET} {settings['quality']}")
+            print(f"  {BOLD}Pipeline command:{RESET}")
+            print(f"    {shlex.join(ffmpeg_cmd)} | {shlex.join(gifski_cmd)}")
+            print(f"{CYAN}=================================================={RESET}\n")
             
-        print(f"\n{CYAN}Encoding GIF (this may take a few seconds)...{RESET}")
-        
-        # Write FFmpeg's stderr to a temporary file instead of a pipe.
-        # This prevents OS pipe buffer saturation and resolves the deadlock bug on larger files.
+            confirm = input(f"{BOLD}Start conversion? [Y/n]:{RESET} ").strip().lower()
+            if confirm == 'n':
+                print("Conversion cancelled.")
+                sys.exit(0)
+                
+            print(f"\n{CYAN}Encoding GIF (this may take a few seconds)...{RESET}")
+            
+        # Run conversion
         with tempfile.TemporaryFile() as ffmpeg_err_file:
             ffmpeg_proc = subprocess.Popen(
                 ffmpeg_cmd, 
@@ -335,26 +436,30 @@ def main():
                 stderr=None
             )
             
-            # Close the write end of the pipe in the parent to allow it to receive SIGPIPE
             ffmpeg_proc.stdout.close()
-            
-            # Wait for both processes
             gifski_proc.wait()
             ffmpeg_proc.wait()
             
-            # Fetch error logs if something went wrong
             ffmpeg_err_file.seek(0)
             ffmpeg_err = ffmpeg_err_file.read()
             
         if gifski_proc.returncode == 0 and ffmpeg_proc.returncode == 0:
             orig_size = os.path.getsize(input_path)
             gif_size = os.path.getsize(output_path)
-            compression_pct = (gif_size / orig_size) * 100
             
             print(f"\n{GREEN}{BOLD}✓ Success! GIF created successfully.{RESET}")
             print(f"  {BOLD}Output File:{RESET} {output_path}")
             print(f"  {BOLD}Original Size:{RESET} {format_size(orig_size)}")
-            print(f"  {BOLD}GIF Size:{RESET}      {format_size(gif_size)} ({compression_pct:.1f}% of original size)")
+            print(f"  {BOLD}GIF Size:{RESET}      {format_size(gif_size)} ({(gif_size / orig_size) * 100:.1f}% of original size)")
+            
+            # Gifsicle optimization
+            if optimize_gifsicle and shutil.which("gifsicle"):
+                success, size_res = optimize_with_gifsicle(output_path)
+                if success:
+                    gif_size = size_res
+            elif not args.no_optimize and not shutil.which("gifsicle") and interactive:
+                print(f"\n{YELLOW}Tip: Install 'gifsicle' to enable further post-processing compression!{RESET}")
+                
             print(f"\n{YELLOW}Tip: You can now drag and drop this GIF directly into GitHub Markdown!{RESET}\n")
         else:
             print(f"\n{RED}❌ Error occurred during conversion.{RESET}")
@@ -363,6 +468,7 @@ def main():
                 print(ffmpeg_err.decode('utf-8', errors='replace').strip())
             if gifski_proc.returncode != 0:
                 print(f"{RED}Gifski failed with return code {gifski_proc.returncode}.{RESET}")
+                sys.exit(1)
                 
     except (KeyboardInterrupt, EOFError):
         print("\n\nAborted by user.")

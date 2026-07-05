@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "demo-gif-cli"
+version = "0.1.0"
+description = "A terminal utility to convert video recordings into high-quality demo GIFs."
+readme = "README.md"
+authors = [
+    { name = "Beau", email = "beau@example.com" }
+]
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Environment :: Console"
+]
+requires-python = ">=3.8"
+dependencies = []
+
+[project.scripts]
+demo-gif = "demo_gif:main"
+
+[tool.setuptools]
+py-modules = ["demo_gif"]
