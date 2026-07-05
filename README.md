@@ -1,6 +1,6 @@
 # 🎬 demo-gif-cli
 
-Hey! This is a simple, interactive terminal tool to convert your screen recordings (MP4, MOV, WebM, whatever) into high-quality, smooth GIFs. It's built specifically to make demo GIFs for GitHub READMEs or documentation without dealing with bloated web tools, watermarks, or giant file sizes.
+Hey! This is a simple terminal tool to convert your screen recordings (MP4, MOV, WebM, etc.) into high-quality, smooth GIFs. It's built to make demo GIFs for GitHub READMEs or docs without bloated web tools, watermarks, or giant file sizes.
 
 It automates a neat pipeline using `ffmpeg` and `gifski`:
 ```bash
@@ -17,11 +17,11 @@ If you've ever tried to make a demo GIF for a repository, you've probably run in
 
 Here is why this tool makes things easier:
 
-* **Insane Quality (`gifski`)**: Instead of the basic GIF palette, `gifski` uses smart color quantization. Your GIFs will look crisp, colors will look accurate, and text remains perfectly readable.
-* **No Disk Thrashing (Piping)**: Instead of rendering thousands of temporary PNG files to your hard drive, we stream raw video frames (`yuv4mpegpipe`) directly from `ffmpeg` into `gifski` through system memory. It's fast and keeps your storage clean.
-* **Auto-Downscaling**: By default, we scale videos down to `800px` width (or whatever you choose) and resample the rate to `15 FPS`. Downscaling inside FFmpeg *before* piping cuts the data stream by **over 80%**, which speeds up the conversion process by 2x.
-* **Typo Protection (Verification)**: Before starting the encoding, the tool runs `ffprobe` to verify the video is valid and displays its duration, FPS, and size. You won't waste time waiting for a conversion to run only to find out you had a typo.
-* **Tab Autocomplete**: Real-world path typing is annoying. We hooked up `readline` so you can use the `Tab` key to autocomplete file paths and navigate directories right inside the prompt.
+* **Insane Quality (`gifski`)**: `gifski` uses smart color quantization. Your GIFs will look crisp, colors will stay true, and text remains clean and readable.
+* **No Disk Mess (Piping)**: We stream raw frames directly through system memory, keeping your disk clean and avoiding thousands of temporary PNG files.
+* **Auto-Downscaling**: We default to `800px` width and `15 FPS`. Downscaling first cuts the data stream by **over 80%**, making conversion twice as fast.
+* **Typo Safety (Verification)**: The tool runs `ffprobe` first to check if your video is valid. It prints the size and duration, so you don't waste time on a typo.
+* **Tab Autocomplete**: Real-world path typing is slow. We set up `readline` so you can press `Tab` to autocomplete paths and folders.
 
 ---
 
