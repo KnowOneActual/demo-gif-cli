@@ -15,3 +15,4 @@ htmlcov/
 *.avi
 *.mkv
 .DS_Store
+.slopless

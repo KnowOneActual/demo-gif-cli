@@ -1,0 +1,10 @@
+LICENSE
+README.md
+demo_gif.py
+pyproject.toml
+demo_gif_cli.egg-info/PKG-INFO
+demo_gif_cli.egg-info/SOURCES.txt
+demo_gif_cli.egg-info/dependency_links.txt
+demo_gif_cli.egg-info/entry_points.txt
+demo_gif_cli.egg-info/top_level.txt
+tests/test_demo_gif.py
