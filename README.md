@@ -1,6 +1,6 @@
 # 🎬 demo-gif-cli
 
-Hey! This is a simple terminal tool to convert your screen recordings (MP4, MOV, WebM, etc.) into high-quality, smooth GIFs. It's built to make demo GIFs for GitHub READMEs or docs without bloated web tools, watermarks, or giant file sizes.
+This is a simple terminal tool to convert your screen recordings (MP4, MOV, WebM, etc.) into high-quality, smooth GIFs. It's built to make demo GIFs for GitHub READMEs or docs without bloated web tools, watermarks, or giant file sizes.
 
 It automates a neat pipeline using `ffmpeg` and `gifski`:
 ```bash

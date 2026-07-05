@@ -11,7 +11,9 @@ import os
 import sys
 import glob
 import json
+import shlex
 import shutil
+import tempfile
 import subprocess
 
 # Terminal Colors
@@ -20,7 +22,6 @@ YELLOW = '\033[93m'
 RED = '\033[91m'
 CYAN = '\033[96m'
 BOLD = '\033[1m'
-UNDERLINE = '\033[4m'
 RESET = '\033[0m'
 
 # Configure path autocompletion using readline
@@ -45,8 +46,8 @@ try:
             
         return results[state] if state < len(results) else None
 
-    # Tab autocompletion setup
-    readline.set_completer_delims(' \t\n;')
+    # Tab autocompletion setup (Space removed from delimiters to support paths with spaces)
+    readline.set_completer_delims('\t\n;')
     readline.parse_and_bind("tab: complete")
     readline.set_completer(path_completer)
 except ImportError:
@@ -146,12 +147,7 @@ def verify_and_probe_video(file_path):
 def prompt_input_file():
     """Prompt the user for a valid input video file with tab autocomplete."""
     while True:
-        try:
-            path_input = input(f"{BOLD}Step 1: Enter path to input video file (Tab to autocomplete):{RESET}\n> ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print("\nAborted by user.")
-            sys.exit(0)
-            
+        path_input = input(f"{BOLD}Step 1: Enter path to input video file (Tab to autocomplete):{RESET}\n> ").strip()
         if not path_input:
             continue
             
@@ -179,13 +175,9 @@ def prompt_output_file(input_path):
     default_output = os.path.join(dir_name, f"{base_name}.gif")
     
     while True:
-        try:
-            print(f"{BOLD}Step 2: Specify output GIF destination path:{RESET}")
-            print(f"  [Default: {default_output}]")
-            output_input = input("> ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print("\nAborted by user.")
-            sys.exit(0)
+        print(f"{BOLD}Step 2: Specify output GIF destination path:{RESET}")
+        print(f"  [Default: {default_output}]")
+        output_input = input("> ").strip()
             
         if not output_input:
             resolved_output = default_output
@@ -226,8 +218,16 @@ def prompt_settings(video_info):
         except ValueError:
             print(f"{YELLOW}Please enter a valid integer.{RESET}")
             
-    # 2. Width
-    orig_width = video_info.get("width", 800)
+    # 2. Width (safely query original width)
+    orig_width = video_info.get("width")
+    if orig_width is None:
+        orig_width = 800
+    else:
+        try:
+            orig_width = int(orig_width)
+        except (ValueError, TypeError):
+            orig_width = 800
+
     default_width = min(800, orig_width)
     while True:
         try:
@@ -267,74 +267,85 @@ def prompt_settings(video_info):
 
 
 def main():
-    print_header()
-    check_dependencies()
-    
-    input_path, video_info = prompt_input_file()
-    output_path = prompt_output_file(input_path)
-    settings = prompt_settings(video_info)
-    
-    # Build scaling filter
-    scale_filter = f"scale='min({settings['width']},iw):-2'"
-    
-    # Construct FFmpeg command
-    ffmpeg_cmd = [
-        "ffmpeg", "-y",
-        "-i", input_path,
-        "-vf", scale_filter,
-        "-pix_fmt", "yuv420p",
-        "-r", str(settings["fps"]),
-        "-f", "yuv4mpegpipe",
-        "-"
-    ]
-    
-    # Construct Gifski command
-    gifski_cmd = [
-        "gifski",
-        "-o", output_path,
-        "--fps", str(settings["fps"]),
-        "--quality", str(settings["quality"]),
-        "-"
-    ]
-    
-    # Print execution plan
-    print(f"\n{BOLD}{CYAN}=================================================={RESET}")
-    print(f"{BOLD}🛠  CONVERSION PLAN{RESET}")
-    print(f"{BOLD}{CYAN}=================================================={RESET}")
-    print(f"  {BOLD}Input:{RESET}   {input_path}")
-    print(f"  {BOLD}Output:{RESET}  {output_path}")
-    print(f"  {BOLD}FPS:{RESET}     {settings['fps']}")
-    print(f"  {BOLD}Width:{RESET}   {settings['width']}px (max)")
-    print(f"  {BOLD}Quality:{RESET} {settings['quality']}")
-    print(f"  {BOLD}Pipeline command:{RESET}")
-    print(f"    {' '.join(ffmpeg_cmd)} | {' '.join(gifski_cmd)}")
-    print(f"{CYAN}=================================================={RESET}\n")
-    
-    confirm = input(f"{BOLD}Start conversion? [Y/n]:{RESET} ").strip().lower()
-    if confirm == 'n':
-        print("Conversion cancelled.")
-        sys.exit(0)
-        
-    print(f"\n{CYAN}Encoding GIF (this may take a few seconds)...{RESET}")
-    
     try:
-        ffmpeg_proc = subprocess.Popen(
-            ffmpeg_cmd, 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE, 
-            text=False
-        )
+        print_header()
+        check_dependencies()
         
-        gifski_proc = subprocess.Popen(
-            gifski_cmd, 
-            stdin=ffmpeg_proc.stdout, 
-            stderr=None
-        )
+        input_path, video_info = prompt_input_file()
+        output_path = prompt_output_file(input_path)
+        settings = prompt_settings(video_info)
         
-        ffmpeg_proc.stdout.close()
-        gifski_proc.wait()
-        _, ffmpeg_err = ffmpeg_proc.communicate()
+        # Build scaling filter
+        # trunc(...) ensures width and height scale to even numbers, which is essential for yuv420p
+        scale_filter = f"scale='trunc(min({settings['width']},iw)/2)*2:-2'"
         
+        # Construct FFmpeg command
+        ffmpeg_cmd = [
+            "ffmpeg", "-y",
+            "-i", input_path,
+            "-vf", scale_filter,
+            "-pix_fmt", "yuv420p",
+            "-r", str(settings["fps"]),
+            "-f", "yuv4mpegpipe",
+            "-"
+        ]
+        
+        # Construct Gifski command
+        gifski_cmd = [
+            "gifski",
+            "-o", output_path,
+            "--fps", str(settings["fps"]),
+            "--quality", str(settings["quality"]),
+            "-"
+        ]
+        
+        # Print execution plan (using shlex.join for shell copy-paste safety)
+        print(f"\n{BOLD}{CYAN}=================================================={RESET}")
+        print(f"{BOLD}🛠  CONVERSION PLAN{RESET}")
+        print(f"{BOLD}{CYAN}=================================================={RESET}")
+        print(f"  {BOLD}Input:{RESET}   {input_path}")
+        print(f"  {BOLD}Output:{RESET}  {output_path}")
+        print(f"  {BOLD}FPS:{RESET}     {settings['fps']}")
+        print(f"  {BOLD}Width:{RESET}   {settings['width']}px (max)")
+        print(f"  {BOLD}Quality:{RESET} {settings['quality']}")
+        print(f"  {BOLD}Pipeline command:{RESET}")
+        print(f"    {shlex.join(ffmpeg_cmd)} | {shlex.join(gifski_cmd)}")
+        print(f"{CYAN}=================================================={RESET}\n")
+        
+        confirm = input(f"{BOLD}Start conversion? [Y/n]:{RESET} ").strip().lower()
+        if confirm == 'n':
+            print("Conversion cancelled.")
+            sys.exit(0)
+            
+        print(f"\n{CYAN}Encoding GIF (this may take a few seconds)...{RESET}")
+        
+        # Write FFmpeg's stderr to a temporary file instead of a pipe.
+        # This prevents OS pipe buffer saturation and resolves the deadlock bug on larger files.
+        with tempfile.TemporaryFile() as ffmpeg_err_file:
+            ffmpeg_proc = subprocess.Popen(
+                ffmpeg_cmd, 
+                stdout=subprocess.PIPE, 
+                stderr=ffmpeg_err_file, 
+                text=False
+            )
+            
+            gifski_proc = subprocess.Popen(
+                gifski_cmd, 
+                stdin=ffmpeg_proc.stdout, 
+                stderr=None
+            )
+            
+            # Close the write end of the pipe in the parent to allow it to receive SIGPIPE
+            ffmpeg_proc.stdout.close()
+            
+            # Wait for both processes
+            gifski_proc.wait()
+            ffmpeg_proc.wait()
+            
+            # Fetch error logs if something went wrong
+            ffmpeg_err_file.seek(0)
+            ffmpeg_err = ffmpeg_err_file.read()
+            
         if gifski_proc.returncode == 0 and ffmpeg_proc.returncode == 0:
             orig_size = os.path.getsize(input_path)
             gif_size = os.path.getsize(output_path)
@@ -353,6 +364,9 @@ def main():
             if gifski_proc.returncode != 0:
                 print(f"{RED}Gifski failed with return code {gifski_proc.returncode}.{RESET}")
                 
+    except (KeyboardInterrupt, EOFError):
+        print("\n\nAborted by user.")
+        sys.exit(0)
     except Exception as e:
         print(f"\n{RED}❌ Failed to execute conversion pipeline: {str(e)}{RESET}")
         sys.exit(1)
