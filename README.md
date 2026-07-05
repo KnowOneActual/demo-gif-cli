@@ -94,5 +94,11 @@ demo-gif -i recording.mov -o demo.gif -f 12 -w 640 -q 85
 
 ---
 
+## 📚 Inspiration & Guides
+
+This tool was inspired by and automates the pipeline described in the excellent guide [App Demo GIFs on Linux](https://han8931.github.io/gif_linux/) by Han Cheol Moon. If you need a walkthrough on how to record raw footage (using OBS Studio) or trim and caption your recording (using Kdenlive) before converting it, check out their article!
+
+---
+
 ## 📄 License
 This project is under the MIT License - feel free to use it however you want.
