@@ -1,5 +1,11 @@
 # 🎬 demo-gif-cli
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
+[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey)](#)
+[![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/KnowOneActual/demo-gif-cli/pulls)
+
 Hey! This is a simple terminal tool to convert your screen recordings (MP4, MOV, WebM, etc.) into high-quality, smooth GIFs. It's built to make demo GIFs for GitHub READMEs or docs without bloated web tools, watermarks, or giant file sizes.
 
 It automates a neat pipeline using `ffmpeg` and `gifski`:
