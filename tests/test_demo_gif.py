@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+import subprocess
 from unittest.mock import patch, MagicMock
 
 # Add project root to path
@@ -50,6 +51,23 @@ class TestDemoGif(unittest.TestCase):
         success, err = demo_gif.verify_and_probe_video("some_dir")
         self.assertFalse(success)
         self.assertEqual(err, "Path points to a directory, not a file.")
+
+    @patch('os.path.exists')
+    @patch('os.path.isdir')
+    @patch('subprocess.run')
+    def test_verify_and_probe_video_process_error(self, mock_run, mock_isdir, mock_exists):
+        mock_exists.return_value = True
+        mock_isdir.return_value = False
+        
+        mock_run.side_effect = subprocess.CalledProcessError(
+            returncode=1,
+            cmd="ffprobe",
+            stderr="ffprobe error output"
+        )
+        
+        success, err = demo_gif.verify_and_probe_video("corrupt.mp4")
+        self.assertFalse(success)
+        self.assertIn("ffprobe could not read the file", err)
 
 
 if __name__ == "__main__":
